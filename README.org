@@ -3,10 +3,15 @@
   :CUSTOM_ID: tractatus
   :END:
 
-*tractatus* is a ORM in Clojure/ClojureScript.
+*tractatus* is a ORM in Clojure.
 
 Since "Object Relational Mapper" sounds way to object oriented, we
 redefined ORM to stand for "Ontology Reification Module".
+
+*tractatus* strives to provide semantics for a resource inventory, a
+dsl to build a resource inventory and protocols (as well as some
+reference implentations) to build functionality on top of resource
+inventories.
 
 "The world is everything that is the case."
 Ludwig Wittgenstein - Tractatus Logico-philosophicus
