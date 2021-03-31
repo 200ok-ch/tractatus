@@ -2,7 +2,7 @@
   "An inventory describes resources. This namespace provides a
   comprehensive specification (in spec) of the inventory as well as a
   DSL to build inventories."
-  (:require [clojure.spec :as s]))
+  (:require [clojure.spec.alpha :as s]))
 
 (s/def ::name keyword?)
 (s/def ::tablename string?)
