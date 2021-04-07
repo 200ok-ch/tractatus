@@ -1,20 +1,30 @@
 (ns tractatus.inventory-test
   (:require [clojure.test :refer :all]
-            [tractatus.inventory :refer :all]))
+            [tractatus.inventory :as i]))
 
 (deftest tablename
   (is (= {:a 1 :tablename "zaphod"}
-         (tablename {:a 1} "zaphod")))
-  (is (= (tablename {:tablename "zaphod"} "beeblebrox")
-         {:tablename "beeblebrox"})))
+         (i/tablename {:a 1} "zaphod")))
+  (is (= {:tablename "beeblebrox"}
+         (i/tablename {:tablename "zaphod"} "beeblebrox"))))
 
 (deftest has-many
-  (is (= (has-many {:a 1} :heads)
-         {:a 1 :associations {:heads {:cardinality :has-many}}})))
+  (is (= {:a 1
+          :associations
+          {:heads
+           {:cardinality :has-many
+            :resource-name :heads
+            :name :heads}}}
+         (i/has-many {:a 1} :heads))))
 
 (deftest belongs-to
-  (is (= (belongs-to {:a 1} :ship)
-         {:a 1 :associations {:ship {:cardinality :belongs-to}}})))
+  (is (= {:a 1
+          :associations
+          {:ship
+           {:cardinality :belongs-to
+            :resource-name :ship
+            :name :ship}}}
+         (i/belongs-to {:a 1} :ship))))
 
 ;; (deftest add-callbacks
 ;;   (is (= (add-callbacks {:a 1} {:b [identity] :c [identity]})

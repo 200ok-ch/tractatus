@@ -2,42 +2,44 @@
   "An inventory describes resources. This namespace provides a
   comprehensive specification (in spec) of the inventory as well as a
   DSL to build inventories."
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [tractatus.inflection :as i]))
+
+;; TODO: switch to fully qualified namespaces
 
 (s/def ::name keyword?)
-(s/def ::tablename string?)
-(s/def ::primary-key keyword?)
+(s/def ::resource-name keyword?)
 (s/def ::cardinality #{:belongs-to :has-many})
 (s/def ::association (s/keys :req-un [::name
+                                      ::resource-name
                                       ::cardinality]))
 (s/def ::associations (s/coll-of ::association))
+(s/def ::callback-name #{:create
+                         :created
+                         :modify
+                         :modified
+                         :destroy
+                         :destroyed})
 (s/def ::callback fn?)
-(s/def ::callbacks (s/map-of #{:create
-                               :created
-                               :update
-                               :updated
-                               :destroy
-                               :destroyed}
+(s/def ::callbacks (s/map-of ::callback-name
                              (s/coll-of ::callback)))
-(s/def ::persistence (s/map-of #{:get
-                                 :find
-                                 :create!
-                                 :update!
-                                 :delete!}
-                               fn?))
+(s/def ::retrievable (s/map-of #{:find-by-id :find-by-conditions} fn?))
+(s/def ::persistable (s/map-of #{:insert! :update! :delete!} fn?))
+(s/def ::tablename string?)
+(s/def ::primary-key keyword?)
 (s/def ::resource (s/keys :req-un [::name]
                           :opt-un [::tablename
                                    ::primary-key
                                    ::associations
                                    ::callbacks
-                                   ::persistence]))
-(s/def ::resources (s/coll-of ::resource))
-(s/def ::inventory (s/keys :req-un [::resources]
-                           :opt-un [::primary-key]))
+                                   ::retrievable
+                                   ::persistable]))
+(s/def ::resources (s/map-of ::resource-name
+                             ::resource))
+(s/def ::inventory (s/keys :opt-un [::primary-key
+                                    ::resources]))
 
-;; TODO: switch to fully qualified namespaces
-
-(defn- validate [inventory spec]
+(defn validate [inventory spec]
   (when-not (s/valid? spec inventory)
     (throw (ex-info "Invalid resource inventory"
                     (s/explain-data spec inventory))))
@@ -48,27 +50,42 @@
   [inventory ds]
   (assoc inventory :datasource ds))
 
-(def ^:private base-inventory
+(defn retrievable
+  [inventory ds]
+  (assoc inventory :retrievable ds))
+
+(defn persistable
+  [inventory ds]
+  (assoc inventory :persistable ds))
+
+(def base-inventory
   (-> {:primary-key :id}
       ;; (datasource (tractatus.persistence.atom/make-atomdb))
       ))
 
-(defmacro defresources
-  [& body]
-  `(-> base-inventory
-       ~@body
-       (validate ::inventory)
-       ;; TODO: use resulting data structure to setup resource records
-       ))
+(defmacro definventory
+  [inventory-name & body]
+  `(def ~inventory-name
+     (-> base-inventory
+         ~@body
+         (validate ::inventory)
+         ;; TODO: use resulting data structure to setup resource records
+         )))
 
-(def ^:private inherited-attributes
-  [:datasource])
+#_(definventory my-inventory)
+
+(def inherited-attributes
+  [:datasource
+   :retrievable
+   :persistable])
 
 (defmacro resource
   [inventory resource-name & body]
   `(assoc-in ~inventory
              [:resources ~resource-name]
-             (-> (select-keys ~inventory inherited-attributes) ~@body)))
+             (-> (select-keys ~inventory inherited-attributes)
+                 (assoc :name ~resource-name)
+                 ~@body)))
 
 (defn tablename
   "Overwrites the predefined table name."
@@ -80,14 +97,26 @@
   [inventory name]
   (assoc inventory :primary-key name))
 
-(defn- add-association [inventory cardinality resource-name]
-  (assoc-in inventory [:associations resource-name :cardinality] cardinality))
+(defn- add-association [inventory association]
+  (assoc-in inventory [:associations (:name association)] association))
 
-(defn has-many [inventory resource-name]
-  (add-association inventory :has-many resource-name))
+(defn has-many
+  ([inventory resource-name] (has-many inventory resource-name {}))
+  ([inventory resource-name opts]
+   (let [resource-name (i/pluralize resource-name)]
+     (add-association inventory (merge {:cardinality :has-many
+                                        :resource-name resource-name
+                                        :name resource-name}
+                                       opts)))))
 
-(defn belongs-to [inventory resource-name]
-  (add-association inventory :belongs-to resource-name))
+(defn belongs-to
+  ([inventory resource-name] (belongs-to inventory resource-name {}))
+  ([inventory resource-name opts]
+   (let [resource-name (i/singularize resource-name)]
+     (add-association inventory (merge {:cardinality :belongs-to
+                                        :resource-name resource-name
+                                        :name resource-name}
+                                       opts)))))
 
 ;;(defn- vectorify [value]
 ;;  (if (sequential? value) value [value]))
