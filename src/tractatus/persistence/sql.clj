@@ -1,15 +1,16 @@
 (ns tractatus.persistence.sql
-  (:require [next.jdbc.sql :as sql]))
+  (:require [next.jdbc.sql :as sql]
+            [tractatus.persistence :as persistence]))
 
 (defrecord Database [spec])
 
-(extend-protocol tractatus.persistence/Entities
+(extend-protocol persistence/Entities
   Database
 
-  (get [{db :spec} {:keys [tablename primary-key]} id]
+  (find-by-id [{db :spec} {:keys [tablename primary-key]} id]
     (sql/get-by-id db tablename id primary-key {}))
 
-  (find [{db :spec} {:keys [tablename]} conditions]
+  (find-by-conditions [{db :spec} {:keys [tablename]} conditions]
     (cond
 
       (map? conditions)
@@ -21,12 +22,12 @@
 
       :else (throw (str "Sql adapter does not support conditions of type " (type conditions)))))
 
-  (create! [{db :spec} {:keys [tablename]} emap]
-    (sql/insert! db tablename emap))
+  (insert! [{db :spec} {:keys [tablename]} attrs]
+    (sql/insert! db tablename attrs))
 
-  (update! [{db :spec} {:keys [tablename primary-key]} emap]
-    (->> (select-keys emap [primary-key])
-         (sql/update! db tablename emap)))
+  (update! [{db :spec} {:keys [tablename primary-key]} attrs]
+    (->> (select-keys attrs [primary-key])
+         (sql/update! db tablename attrs)))
 
-  (destroy! [{db :spec} {:keys [tablename primary-key]} id]
+  (delete! [{db :spec} {:keys [tablename primary-key]} id]
     (sql/delete! db tablename {primary-key id})))

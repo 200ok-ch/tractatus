@@ -1,4 +1,4 @@
-(ns tractatus.resource)
+(ns tractatus.resources)
 
 (defprotocol Describable
   (describe [this]))
@@ -24,31 +24,40 @@
   f)
 
 (deftype Resource [specification]
+
   Describable
   (describe [this]
     specification)
+
   Retrievable
   (find-by-id [this id]
     ((-> specification :retrievable :find-by-id assert-fn)
-     (-> specification :tablename)
+     (-> specification :datasource)
+     (select-keys specification [:tablename :primary-key])
      id))
   (find-by-conditions [this conditions]
     ((-> specification :retrievable :find-by-conditions assert-fn)
-     (-> specification :tablename)
+     (-> specification :datasource)
+     (select-keys specification [:tablename :primary-key])
      conditions))
+
   Persistable
   (insert! [this attrs]
     ((-> specification :persistable :insert! assert-fn)
-     (-> specification :tablename)
+     (-> specification :datasource)
+     (select-keys specification [:tablename :primary-key])
      attrs))
   (update! [this attrs]
     ((-> specification :persistable :update! assert-fn)
-     (-> specification :tablename)
+     (-> specification :datasource)
+     (select-keys specification [:tablename :primary-key])
      attrs))
   (delete! [this id]
     ((-> specification :persistable :delete! assert-fn)
-     (-> specification :tablename)
+     (-> specification :datasource)
+     (select-keys specification [:tablename :primary-key])
      id))
+
   Lifecyclable
   (create! [this attrs])
   (modify! [this attrs])
@@ -56,16 +65,18 @@
 
 #_(def employee (->Resource employee-details))
 
-(defmacro reify-inventory
-  "Takes an inventory and defines the specified resources."
-  [inventory]
+(defmacro reify-domain
+  "Takes a domain and defines the specified resources."
+  [domain]
   `(do
-     ~@(for [[resource-name# resource#] (:resources inventory)]
+     ~@(for [[resource-name# resource#] (:resources (eval domain))]
          (let [name# (symbol resource-name#)]
-           `(def ~name#
-              (->Resource ~resource#))))))
+           `(def ~name# (->Resource ~resource#))))))
 
-#_(macroexpand '(reify-inventory {:resources {:a {}}}))
+#_(def domain {:resources {:a {:name "a"} :b {:name "b"}}})
+#_(macroexpand `(reify-domain domain))
+
+;; --------------------------------------------------------------------------------
 
 (comment
 
@@ -78,16 +89,33 @@
      :retrievable {:find-by-id ident
                    :find-by-conditions ident}})
 
-  (def ^:private inventory
+  (def ^:private domain
     {:resources {:employee employee-details}})
 
-  ;; TODO: use the inventory dsl instead
+  ;; TODO: use the domain dsl instead
 
-  (reify-inventory inventory)
+  (reify-domain domain)
 
   (find-by-id employee 1)
 
   (find-by-conditions employee {:name "Phil"})
 
   (describe employee)
+  )
+
+
+(comment
+  (defmacro mkfn [fns]
+    `(do
+       ~@(for [fn# fns]
+           `(defn ~(symbol fn#) []
+              ~fn#))))
+
+  (macroexpand '(mkfn [:a]))
+
+  (mkfn [:a :b :c])
+
+  (a)
+  (b)
+  (c)
   )
