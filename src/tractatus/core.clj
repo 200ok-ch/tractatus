@@ -1,8 +1,8 @@
 (ns tractatus.core
-  (:require [tractatus.inflection :as inflection]
-            ;; this namespace combines all tractatus namespaces for convenience
-            [tractatus.inventory :refer :all]
-            [tractatus.resource :refer :all]))
+  "This namespace combines all tractatus namespaces for convenience."
+  (:require [tractatus.inflection :refer :all]
+            [tractatus.domain :refer :all]
+            [tractatus.resources :refer :all]))
 
 ;; ;; 1. macros to work with the entity registry (ereg)
 

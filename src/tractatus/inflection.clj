@@ -2,7 +2,8 @@
   "This is mainly a translation of parts of ActiveSupport's inflection library.
 
    See `https://github.com/rails/rails/blob/main/activesupport/lib/active_support/inflections.rb`"
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.set :as set]))
 
 (def ^:private uncountable
   "A set of uncountables."
@@ -39,7 +40,7 @@
 (defn- irregular-plural->singular
   "Returns the singular of a irregular plural or nil."
   [s]
-  ((-> irregular clojure.set/map-invert) s))
+  ((-> irregular set/map-invert) s))
 
 (defn- irregular-singular->singular
   "Returns `s` if `s` is an irregular singular."

@@ -1,4 +1,5 @@
-(ns tractatus.resources)
+(ns tractatus.resources
+  (:require [camel-snake-kebab.core :as csk]))
 
 (defprotocol Describable
   (describe [this]))
@@ -70,7 +71,7 @@
   [domain]
   `(do
      ~@(for [[resource-name# resource#] (:resources (eval domain))]
-         (let [name# (symbol resource-name#)]
+         (let [name# (symbol (csk/->PascalCase resource-name#))]
            `(def ~name# (->Resource ~resource#))))))
 
 #_(def domain {:resources {:a {:name "a"} :b {:name "b"}}})
