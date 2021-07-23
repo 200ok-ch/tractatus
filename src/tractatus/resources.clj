@@ -66,16 +66,13 @@
 
 #_(def employee (->Resource employee-details))
 
-(defmacro reify-domain
-  "Takes a domain and defines the specified resources."
-  [domain]
-  `(do
-     ~@(for [[resource-name# resource#] (:resources (eval domain))]
-         (let [name# (symbol (csk/->PascalCase resource-name#))]
-           `(def ~name# (->Resource ~resource#))))))
-
-#_(def domain {:resources {:a {:name "a"} :b {:name "b"}}})
-#_(macroexpand `(reify-domain domain))
+(defn reify-domain
+  "Takes a domain and defines the specified resources in the namespace
+  it is called from. See https://stackoverflow.com/a/68379190/3094876"
+  [{:keys [resources]}]
+  (doseq [[resource-name resource] resources]
+    (let [resource-symbol (symbol (csk/->PascalCase resource-name))]
+      (intern *ns* resource-symbol (->Resource resource)))))
 
 ;; --------------------------------------------------------------------------------
 
