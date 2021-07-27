@@ -79,13 +79,15 @@
   [domain ds]
   (assoc domain :persistable ds))
 
+;; TODO: check if there is a better way than passing quoted symbols,
+;; which require a resolve-deref on the other side
 (def base-domain
   (-> {:primary-key :id}
-      (retrievable {:find-by-id tp/find-by-id
-                    :find-by-conditions tp/find-by-conditions})
-      (persistable {:insert! tp/insert!
-                    :update! tp/update!
-                    :delete! tp/delete!})
+      (retrievable {:find-by-id 'tractatus.persistence/find-by-id
+                    :find-by-conditions 'tractatus.persistence/find-by-conditions})
+      (persistable {:insert! 'tractatus.persistence/insert!
+                    :update! 'tractatus.persistence/update!
+                    :delete! 'tractatus.persistence/delete!})
       ;; (datasource (tractatus.persistence.atom/make-atomdb))
       ))
 
