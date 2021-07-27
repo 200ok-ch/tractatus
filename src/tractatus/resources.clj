@@ -32,29 +32,29 @@
 
   Retrievable
   (find-by-id [this id]
-    ((-> specification :retrievable :find-by-id assert-fn)
+    ((-> specification :retrievable :find-by-id resolve deref assert-fn)
      (-> specification :datasource)
      (select-keys specification [:tablename :primary-key])
      id))
   (find-by-conditions [this conditions]
-    ((-> specification :retrievable :find-by-conditions assert-fn)
+    ((-> specification :retrievable :find-by-conditions resolve deref assert-fn)
      (-> specification :datasource)
      (select-keys specification [:tablename :primary-key])
      conditions))
 
   Persistable
   (insert! [this attrs]
-    ((-> specification :persistable :insert! assert-fn)
+    ((-> specification :persistable :insert! resolve deref assert-fn)
      (-> specification :datasource)
      (select-keys specification [:tablename :primary-key])
      attrs))
   (update! [this attrs]
-    ((-> specification :persistable :update! assert-fn)
+    ((-> specification :persistable :update! resolve deref assert-fn)
      (-> specification :datasource)
      (select-keys specification [:tablename :primary-key])
      attrs))
   (delete! [this id]
-    ((-> specification :persistable :delete! assert-fn)
+    ((-> specification :persistable :delete! resolve deref assert-fn)
      (-> specification :datasource)
      (select-keys specification [:tablename :primary-key])
      id))
