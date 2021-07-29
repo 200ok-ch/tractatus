@@ -3,6 +3,8 @@
   :CUSTOM_ID: tractatus
   :END:
 
+[[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]
+
 *tractatus* is a ORM in Clojure.
 
 Since "Object Relational Mapper" sounds way to object oriented, we
