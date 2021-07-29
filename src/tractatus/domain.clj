@@ -103,9 +103,11 @@
 #_(defdomain my-domain)
 
 (def inherited-attributes
-  [:datasource
+  [:primary-key
+   :datasource
    :retrievable
-   :persistable])
+   :persistable
+   :callbacks])
 
 (defmacro resource
   [domain resource-name & body]
@@ -147,51 +149,54 @@
                                      :name resource-name}
                                     opts)))))
 
-;;(defn- vectorify [value]
-;;  (if (sequential? value) value [value]))
-;;
-;;(defn- vectorify-values [a-map]
-;;  (reduce-kv (fn [m k v] (assoc m k (vectorify v))) {} a-map))
-;;
-;;(defn add-callbacks [domain callback-map]
-;;  (update domain :callbacks #(merge-with concat % (vectorify-values callback-map))))
-;;
-;;(defn add-callback
-;;  "To install a callback, `hook` is one of the following keywords:
-;;
-;;    :create
-;;    :created
-;;    :update
-;;    :updated
-;;    :destroy
-;;    :destroyed
-;;
-;;  and value is a callback function that takes
-;;
-;;    etype - the entity type the callback was registered on
-;;    hook  - the keyword the callback was registered for
-;;    emap  - entity map of the entity currently being processed
-;;
-;;  and returns one of the following, in case of success:
-;;
-;;    true          - identity of emap, no errors
-;;    a map         - modified emap, no errors
-;;
-;;  xor one of the following, in case of failure:
-;;
-;;    false         - unspecified error
-;;    a string      - an error message
-;;    a vector/list - multiple errors
-;;    other         - error with error object
-;;
-;;  If a before callback returns an error the action will not be
-;;  performed. If the errors key `:halt` evaluates to true the callback
-;;  chain will be halted entirely."
-;;  [domain hook handler]
-;;  {:pre [(#{:create
-;;            :created
-;;            :update
-;;            :updated
-;;            :destroy
-;;            :destroyed} hook)]}
-;;  (add-callbacks domain {hook [handler]}))
+(defn- vectorify [value]
+  (if (sequential? value) value [value]))
+
+(defn- vectorify-values [a-map]
+  (reduce-kv (fn [m k v] (assoc m k (vectorify v))) {} a-map))
+
+(defn add-callbacks [domain callback-map]
+  (update domain :callbacks #(merge-with concat % (vectorify-values callback-map))))
+
+(defn add-callback
+  "To install a callback, HOOK is one of the following keywords:
+
+   :create
+   :created
+   :update
+   :updated
+   :destroy
+   :destroyed
+
+  and HANDLER is a function that takes either 1, 2, or 3 arguments
+
+   attrs    - resource map (required)
+   resource - the resource type the callback was registered on (optional)
+   hook     - the keyword the callback was registered for (optional)
+
+  The handler function has to return one of the following.
+
+  In case of success:
+
+   true          - identity of resource attrs, no errors
+   a map         - modified resource attrs, no errors
+
+  In case of failure:
+
+   false         - unspecified error
+   a string      - an error message
+   a vector/list - multiple errors
+   other         - error with error object
+
+  If a before callback returns an error the action will not be
+  performed. If the errors key `:halt` evaluates to true the callback
+  chain will be halted entirely."
+  [domain hook handler]
+  {:pre [(#{:create
+            :created
+            :modify
+            :modified
+            :destroy
+            :destroyed} hook)
+         (fn? handler)]}
+  (add-callbacks domain {hook [handler]}))
