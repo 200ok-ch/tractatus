@@ -1,26 +1,9 @@
-# #+BEGIN_EXPORT html
-# <style>
-# blockquote {
-#     margin-bottom: 10px;
-#     padding: 10px;
-#     background-color: #FFF8DC;
-#     border-left: 2px solid #ffeb8e;
-#     border-left-color: rgb(255, 228, 102);
-#     display: block;
-#     margin-block-start: 1em;
-#     margin-block-end: 1em;
-#     margin-inline-start: 40px;
-#     margin-inline-end: 40px;
-# }
-# </style>
-# #+END_EXPORT
+[[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]\
 
 * tractatus
   :PROPERTIES:
   :CUSTOM_ID: tractatus
   :END:
-
-[[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]
 
 #+BEGIN_QUOTE
 The world is everything that is the case.
