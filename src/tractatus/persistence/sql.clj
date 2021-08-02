@@ -26,8 +26,11 @@
     (sql/insert! db tablename attrs))
 
   (update! [{db :spec} {:keys [tablename primary-key]} attrs]
-    (->> (select-keys attrs [primary-key])
-         (sql/update! db tablename attrs)))
+    (sql/update! db tablename attrs
+                 (select-keys attrs [primary-key])
+                 {:return-keys true}))
 
   (delete! [{db :spec} {:keys [tablename primary-key]} id]
-    (sql/delete! db tablename {primary-key id})))
+    (sql/delete! db tablename
+                 {primary-key id}
+                 {:return-keys true})))

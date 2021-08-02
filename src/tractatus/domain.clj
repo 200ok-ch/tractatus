@@ -72,12 +72,33 @@
   (assoc domain :datasource ds))
 
 (defn retrievable
-  [domain ds]
-  (assoc domain :retrievable ds))
+  [domain fn-map]
+  (assoc domain :retrievable fn-map))
 
 (defn persistable
-  [domain ds]
-  (assoc domain :persistable ds))
+  [domain fn-map]
+  (assoc domain :persistable fn-map))
+
+(defn transformable
+  [domain fn-map]
+  (assoc domain :transformable fn-map))
+
+;; (def ^:private merge-with-concat
+;;   (partial merge-with concat))
+;;
+;; #_(update {:a {:b [:c]}} :a merge-with-concat {:b [:d]})
+;;
+;; (defn add-transformations
+;;   [domain value]
+;;   (update domain :transformable merge-with-concat value))
+;;
+;; (defn add-read-transformation
+;;   [domain f]
+;;   (add-transformations domain {:read [f]}))
+;;
+;; (defn add-write-transformation
+;;   [domain f]
+;;   (add-transformations domain {:write [f]}))
 
 ;; TODO: check if there is a better way than passing quoted symbols,
 ;; which require a resolve-deref on the other side
@@ -107,6 +128,7 @@
    :datasource
    :retrievable
    :persistable
+   :transformable
    :callbacks])
 
 (defmacro resource

@@ -81,27 +81,32 @@
 
   Retrievable
   (find-by-id [this id]
-    ((-> specification :retrievable :find-by-id resolve deref assert-fn)
-     (-> specification :datasource)
-     (select-keys specification [:tablename :primary-key])
-     id))
+    ((get-in specification [:transformable :read] identity)
+     ((-> specification :retrievable :find-by-id resolve deref assert-fn)
+      (-> specification :datasource)
+      (select-keys specification [:tablename :primary-key])
+      id)))
   (find-by-conditions [this conditions]
-    ((-> specification :retrievable :find-by-conditions resolve deref assert-fn)
-     (-> specification :datasource)
-     (select-keys specification [:tablename :primary-key])
-     conditions))
+    (map
+     (get-in specification [:transformable :read] identity)
+     ((-> specification :retrievable :find-by-conditions resolve deref assert-fn)
+      (-> specification :datasource)
+      (select-keys specification [:tablename :primary-key])
+      conditions)))
 
   Persistable
   (insert! [this attrs]
-    ((-> specification :persistable :insert! resolve deref assert-fn)
-     (-> specification :datasource)
-     (select-keys specification [:tablename :primary-key])
-     attrs))
+    ((get-in specification [:transformable :read] identity)
+     ((-> specification :persistable :insert! resolve deref assert-fn)
+      (-> specification :datasource)
+      (select-keys specification [:tablename :primary-key])
+      ((get-in specification [:transformable :write] identity) attrs))))
   (update! [this attrs]
-    ((-> specification :persistable :update! resolve deref assert-fn)
-     (-> specification :datasource)
-     (select-keys specification [:tablename :primary-key])
-     attrs))
+    ((get-in specification [:transformable :read] identity)
+     ((-> specification :persistable :update! resolve deref assert-fn)
+      (-> specification :datasource)
+      (select-keys specification [:tablename :primary-key])
+      ((get-in specification [:transformable :write] identity) attrs))))
   (delete! [this id]
     ((-> specification :persistable :delete! resolve deref assert-fn)
      (-> specification :datasource)
