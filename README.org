@@ -5,18 +5,25 @@
 
 [[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]
 
-*tractatus* is a ORM in Clojure.
+*"The world is everything that is the case."*
+Ludwig Wittgenstein -- Tractatus Logico-philosophicus
 
-Since "Object Relational Mapper" sounds way to object oriented, we
-redefined ORM to stand for "Ontology Reification Module".
+*tractatus* is a Clojure library and aims in helping with specifing
+and working with resources.
 
-*tractatus* strives to provide semantics for a resource inventory, a
-dsl to build a resource inventory and protocols (as well as some
-reference implentations) to build functionality on top of resource
-inventories.
+Some might see it as an [[https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping][ORM]] in Clojure. But since "Object Relational
+Mapper" sounds way to object oriented, let's redefine ORM to stand for
+"Ontology Reification Module".
 
-"The world is everything that is the case."
-Ludwig Wittgenstein - Tractatus Logico-philosophicus
+*tractatus* provides semantics for domain specifications, a DSL to
+build domain specifications and protocols (as well as some reference
+implentations) to build functionality on top of domain specifications.
+
+*tractatus* is to some extent influenced by
+
+- https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping
+- https://en.wikipedia.org/wiki/Domain-driven_design
+- https://en.wikipedia.org/wiki/Command%E2%80%93query_separation
 
 ** License
    :PROPERTIES:
