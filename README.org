@@ -1,3 +1,20 @@
+#+BEGIN_EXPORT html
+<style>
+blockquote {
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: #FFF8DC;
+    border-left: 2px solid #ffeb8e;
+    border-left-color: rgb(255, 228, 102);
+    display: block;
+    margin-block-start: 1em;
+    margin-block-end: 1em;
+    margin-inline-start: 40px;
+    margin-inline-end: 40px;
+}
+</style>
+#+END_EXPORT
+
 * tractatus
   :PROPERTIES:
   :CUSTOM_ID: tractatus
@@ -5,8 +22,10 @@
 
 [[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]
 
-*"The world is everything that is the case."*
-Ludwig Wittgenstein -- Tractatus Logico-philosophicus
+#+BEGIN_QUOTE
+The world is everything that is the case.
+-- Ludwig Wittgenstein, Tractatus Logico-philosophicus
+#+END_QUOTE
 
 *tractatus* is a Clojure library and aims in helping with specifing
 and working with resources.
@@ -21,9 +40,9 @@ implentations) to build functionality on top of domain specifications.
 
 *tractatus* is to some extent influenced by
 
-- https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping
-- https://en.wikipedia.org/wiki/Domain-driven_design
-- https://en.wikipedia.org/wiki/Command%E2%80%93query_separation
+- [[https://en.wikipedia.org/wiki/Object%E2%80%93relational_mapping][Object Relational Mapping]]
+- [[https://en.wikipedia.org/wiki/Domain-driven_design][Domain Driven Design]]
+- [[https://en.wikipedia.org/wiki/Command%E2%80%93query_separation][Command Query Separation]]
 
 ** License
    :PROPERTIES:
