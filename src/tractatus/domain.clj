@@ -154,16 +154,17 @@
   (assoc-in domain [:associations (:name association)] association))
 
 (defn has-many
-  ([domain resource-name] (has-many domain resource-name {}))
+  ([domain resource-name]
+   (has-many domain resource-name {}))
   ([domain resource-name opts]
-   (let [resource-name (ti/pluralize resource-name)]
-     (add-association domain (merge {:cardinality :has-many
-                                     :resource-name resource-name
-                                     :name resource-name}
-                                    opts)))))
+   (add-association domain (merge {:cardinality :has-many
+                                   :resource-name (ti/singularize resource-name)
+                                   :name (ti/pluralize resource-name)}
+                                  opts))))
 
 (defn belongs-to
-  ([domain resource-name] (belongs-to domain resource-name {}))
+  ([domain resource-name]
+   (belongs-to domain resource-name {}))
   ([domain resource-name opts]
    (let [resource-name (ti/singularize resource-name)]
      (add-association domain (merge {:cardinality :belongs-to

@@ -68,3 +68,48 @@
 ;; TODO: test destroy!
 
 ;; TODO: test reify-domain
+
+(deftest new*
+  (is (instance? Integer
+                 (r/new* (resolve 'Integer) 42)))
+  (is (instance? Integer
+                 (r/new* (resolve (symbol "Integer")) 42))))
+
+(r/defresource Monkey
+  {::likes :banana})
+
+(deftest defresource
+  (testing "create instances of resource class"
+    (are [i] (instance? Monkey i)
+      (->Monkey {})
+      (->Monkey {:name "Bubbles"})
+      (Monkey. {:name "Bubbles"})
+      (new Monkey {:name "Bubbles"})
+      (r/new* (resolve 'Monkey) {:name "Bubbles"})))
+
+  (testing "lookup attrs as if it was just a map"
+    (let [monkey (->Monkey {:name "Bubbles"})]
+      (are [a b] (= a b)
+        "Bubbles" (:name monkey)
+        "Bubbles" (monkey :name))))
+
+  (testing "lookup aspects as a fallback to attrs"
+    (let [monkey (->Monkey {:name "Bubbles"})]
+      (are [a b] (= a b)
+        :banana (::likes monkey)
+        :banana (monkey ::likes))))
+
+  (testing "attrs can shadow (aka override) aspects"
+    (let [monkey (->Monkey {::likes "steak"})]
+      (are [a b] (= a b)
+        "steak" (::likes monkey)
+        "steak" (monkey ::likes))))
+
+  (testing "assoc attrs as if it was just a map"
+    (let [monkey (->Monkey {:name "Bubbles"})
+          new-monkey (assoc monkey
+                            :name "Donkey Kong"
+                            :year 1981)]
+      (is (= "Donkey Kong" (:name new-monkey)))
+      (is (= 1981 (:year new-monkey)))
+      (is (instance? Monkey new-monkey)))))
