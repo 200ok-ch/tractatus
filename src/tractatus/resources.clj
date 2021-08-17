@@ -14,13 +14,23 @@
   (assert (fn? f) (str "Expected function, found " (or (type f) "nil") "."))
   f)
 
-(defn new* [klass & args]
+(defn new*
+  "Slow instanciation without the use of any special forms."
+  [klass & args]
   (clojure.lang.Reflector/invokeConstructor
    klass (to-array args)))
 
 (defn- arity [f]
   {:pre [(instance? clojure.lang.AFunction f)]}
   (-> f class .getDeclaredMethods first .getParameterTypes alength))
+
+(defn make-tablename [s]
+  (-> (.getName s)
+      (str/split #"\.")
+      last
+      (str/replace #"([a-z])([A-Z])" "$1-$2")
+      str/lower-case
+      ti/pluralize))
 
 ;;; Callback Helpers
 
@@ -54,17 +64,6 @@
       (let [[record² errors²] (run-callbacks record hook remaining)]
         [record² (concat errors¹ errors²)]))))
 
-(defn make-tablename [s]
-  (-> (.getName s)
-      (str/split #"\.")
-      last
-      (str/replace #"([a-z])([A-Z])" "$1-$2")
-      str/lower-case
-      ti/pluralize))
-
-#_(make-tablename String)
-#_(make-tablename (deftype HaneBambel []))
-
 ;;; Defaults
 
 ;; TODO: use qualified keywords instead
@@ -77,6 +76,8 @@
    {:insert! 'tractatus.persistence/insert!
     :update! 'tractatus.persistence/update!
     :delete! 'tractatus.persistence/delete!}})
+
+;; defresource
 
 (defmacro defresource [resource-name aspects]
   `(deftype ~resource-name [~'attrs]
@@ -137,7 +138,6 @@
 
      (find-by-id [this# id#]
        (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
-       #dbg
        (if-let [attrs#
                 ((get (tp/aspects this#) :transform-on-read identity)
                  ((-> this# tp/aspects :retrievable :find-by-id resolve deref assert-fn)
@@ -189,6 +189,7 @@
                ((-> this# tp/aspects :primary-key) ~'attrs)))))
 
      tp/Callbackable
+
      (callbacks [this# hook#]
        (if-let [fns# (get-in (tp/aspects this#) [:callbacks hook#])]
          (->> (run-callbacks this# hook# fns#)
@@ -269,8 +270,12 @@
 
 (comment
 
+  (require '[tractatus.persistence.atom :as ta])
+
+  (def db (ta/make-atomdb))
+
   (defresource Monkey
-    {:datasource (ta/make-atomdb)
+    {:datasource db
      ::name :monkey})
   ;; create instance
   (def monkey (->Monkey {:name "Bubbles" :banana true}))
@@ -283,7 +288,6 @@
   (::name monkey)
   (monkey ::name)
 
-  (into {} monkey)
   (assoc monkey :name "Donkey Kong")
   (assoc monkey
          :name "Donkey Kong"
@@ -296,64 +300,14 @@
   (attributes saved-monkey)
   (find-by-id Monkey (:id saved-monkey))
   (find-by-conditions Monkey {:name "Bubbles"})
-
-
-
-  (into {} monkey)
-
-
-  ;; TODO: https://gist.github.com/kriyative/2642569
-
-  (require '[tractatus.domain :as td]
-           '[tractatus.persistence.atom :as ta])
-
-  (td/defdomain test
-    (td/datasource (ta/make-atomdb))
-    (td/resource :tenant
-                 (td/has-many :jobs))
-    (td/resource :job
-                 (td/belongs-to :tenant)
-                 (td/has-many :job-results))
-    (td/resource :job-result
-                 (td/belongs-to :job)))
-
-  (reify-domain test)
-
-  (def tenant (create! Tenant {}))
-  (def job (create! Job {:tenant_id (:id tenant)}))
-  (associated Job job :tenant)
-
   )
 
 ;;; Notes
 
 (comment
 
-  ;; the application can use it like this
+  ;; TODO: https://gist.github.com/kriyative/2642569
 
-  (def ^:private ident (fn [& args] args))
-
-  (def ^:private employee-details
-    {:tablename :employee
-     :retrievable {:find-by-id ident
-                   :find-by-conditions ident}})
-
-  (def ^:private domain
-    {:resources {:employee employee-details}})
-
-  ;; TODO: use the domain dsl instead
-
-  (reify-domain domain)
-
-  (find-by-id employee 1)
-
-  (find-by-conditions employee {:name "Phil"})
-
-  (describe employee)
-  )
-
-
-(comment
   (defmacro mkfn [fns]
     `(do
        ~@(for [fn# fns]

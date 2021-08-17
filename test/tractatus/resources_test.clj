@@ -7,27 +7,52 @@
 
 ;; TODO: maybe test assert-fn
 
-;; TODO: maybe test arity
+(deftest new*
+  (is (instance? Integer
+                 (r/new* (resolve 'Integer) 42)))
+  (is (instance? Integer
+                 (r/new* (resolve (symbol "Integer")) 42))))
 
-(deftest run-callback
-  (is (= [{:a 42} []]
-         (#'r/run-callback (fn [& x] true) nil nil {:a 42})))
-  (is (= [{:b 23} []]
-         (#'r/run-callback (fn [& x] {:b 23}) nil nil {:a 42})))
-  (is (= [{:a 42} [{:error "Unspecified Error"}]]
-         (#'r/run-callback (fn [& x] false) nil nil {:a 42})))
-  (is (= [{:a 42} [{:error "Vollpfosten"}]]
-         (#'r/run-callback (fn [& x] [{:error "Vollpfosten"}]) nil nil {:a 42})))
-  (is (= [{:a 42} [{:error "Unknown Error" :object 23}]]
-         (#'r/run-callback (fn [& x] 23) nil nil {:a 42}))))
+(deftest arity
+  (are [a f] (= a (#'r/arity f))
+    1 identity
+    2 +
+    3 reduce
+    4 map
+    4 swap!
+    6 update))
+
+(deftest make-tablename
+  (are [a b] (= a b)
+    "strings" (r/make-tablename String)
+    "hane-bambels" (r/make-tablename (deftype HaneBambel []))))
+
+(defrecord SomeRecord [x])
+
+(def record (->SomeRecord 42))
+
+(deftest run-callback ;; callback record hook
+  (are [errors callback] (= [record errors] (#'r/run-callback callback record :some-hook))
+    ;; happy cases
+    [] (constantly true)
+    [] identity
+    [] #(assoc % :x 42)
+    ;; unhappy cases
+    [{:error "Unspecified Error"}] (constantly false)
+    [{:error "Vollpfosten"}] (constantly "Vollpfosten")
+    [{:error "Vollpfosten"}] (constantly [{:error "Vollpfosten"}])
+    [{:error "Unknown Error" :object 23}] (constantly 23)
+    [{:error "Unknown Error" :object {:x 23}}] (constantly {:x 23})))
 
 ;; TODO: maybe test run-callbacks
 
-(deftest describe
-  (is (= {:some "description"}
-         (r/describe (r/->Resource {:some "description"})))))
-
 ;; NOTE: from here state is involved in testing
+
+(r/defresource Resource0 {:x 42})
+
+(deftest aspects
+  (is (= 42 (-> {} ->Resource0 r/aspects :x))))
+
 
 (def db (a/make-atomdb))
 
@@ -69,12 +94,6 @@
 
 ;; TODO: test reify-domain
 
-(deftest new*
-  (is (instance? Integer
-                 (r/new* (resolve 'Integer) 42)))
-  (is (instance? Integer
-                 (r/new* (resolve (symbol "Integer")) 42))))
-
 (r/defresource Monkey
   {::likes :banana})
 
@@ -84,8 +103,7 @@
       (->Monkey {})
       (->Monkey {:name "Bubbles"})
       (Monkey. {:name "Bubbles"})
-      (new Monkey {:name "Bubbles"})
-      (r/new* (resolve 'Monkey) {:name "Bubbles"})))
+      (new Monkey {:name "Bubbles"})))
 
   (testing "lookup attrs as if it was just a map"
     (let [monkey (->Monkey {:name "Bubbles"})]
