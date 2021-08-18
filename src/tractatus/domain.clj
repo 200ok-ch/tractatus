@@ -4,7 +4,8 @@
   domain as well as a DSL to build domains programmtically."
   (:require [clojure.spec.alpha :as s]
             [tractatus.inflection :as ti]
-            [tractatus.persistence :as tp]))
+            [tractatus.persistence :as tp]
+            [clojure.string :as str]))
 
 ;; TODO: switch to fully qualified namespaces
 
@@ -113,7 +114,7 @@
              [:resources ~resource-name]
              (-> (select-keys ~domain inherited-attributes)
                  (assoc :name ~resource-name)
-                 (assoc :tablename (ti/pluralize (name ~resource-name)))
+                 (assoc :tablename (str/replace (ti/pluralize (name ~resource-name)) #"-" "_"))
                  ~@body)))
 
 (defn tablename
