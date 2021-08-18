@@ -4,7 +4,7 @@
             [tractatus.protocols :as tp]
             [clojure.string :as str]
             [tractatus.inflection :as ti])
-  (:import [clojure.lang ILookup IFn Associative IPersistentCollection]))
+  (:import [clojure.lang ILookup IFn Associative IPersistentCollection SeqIterator]))
 
 ;;; General Helpers
 
@@ -17,15 +17,18 @@
 (defn new*
   "Slow instanciation without the use of any special forms."
   [klass & args]
-  (clojure.lang.Reflector/invokeConstructor
-   klass (to-array args)))
+  (clojure.lang.Reflector/invokeConstructor klass (to-array args)))
 
-(defn- arity [f]
+(defn- arity
+  "Returns the arity of a function F"
+  [f]
   {:pre [(instance? clojure.lang.AFunction f)]}
   (-> f class .getDeclaredMethods first .getParameterTypes alength))
 
-(defn make-tablename [s]
-  (-> (.getName s)
+(defn make-tablename
+  "Takes a class C and returns a somewhat meaningful tablename"
+  [c]
+  (-> (.getName c)
       (str/split #"\.")
       last
       (str/replace #"([a-z])([A-Z])" "$1-$2")
@@ -82,7 +85,17 @@
 (defmacro defresource [resource-name aspects]
   `(deftype ~resource-name [~'attrs]
 
-     tp/IAspects
+    Object
+    (hashCode [this] (reduce hash-combine
+                             (keyword (str *ns*) (.getName ~resource-name))
+                             ~'attrs))
+    (equals [this other]
+      (boolean (or (identical? this other)
+                   (when (identical? (class this) (class other))
+                     (= ~'attrs (.~'attrs other))))))
+
+
+    tp/IAspects
 
      (aspects [this#]
        ;; TODO: deep merge
@@ -95,7 +108,7 @@
      (attributes [this#]
        ~'attrs)
 
-     ILookup ;; (:name monkey)
+     clojure.lang.ILookup ;; (:name monkey)
 
      (valAt [this# key#]
        (get ~'attrs key#
@@ -305,6 +318,55 @@
 ;;; Notes
 
 (comment
+
+  ;; https://gist.github.com/michalmarczyk/468332
+  (deftype DefaultMap [default __map]
+    Object
+    (hashCode [this] (reduce hash-combine
+                             (keyword (str *ns*) "DefaultMap")
+                             default
+                             __map))
+    (equals [this other]
+      (boolean (or (identical? this other)
+                   (when (identical? (class this) (class other))
+                     (every? true? (map = [default __map]
+                                        [(.default other)
+                                         (.__map other)]))))))
+    clojure.lang.IObj
+    (meta [this] (.meta __map))
+    (withMeta [this m]
+      (DefaultMap. default (.withMeta __map m)))
+    clojure.lang.ILookup
+    (valAt [this k] (.valAt __map k default))
+    (valAt [this k else] (.valAt __map k else))
+    clojure.lang.IKeywordLookup
+    (getLookupThunk [this k]
+      (reify clojure.lang.ILookupThunk
+        (get [thunk target]
+          (if (identical? (class target) (class this))
+            (.valAt this k)))))
+    clojure.lang.IPersistentMap
+    (count [this] (.count __map))
+    (empty [this] (DefaultMap. default (.empty __map)))
+    (cons [this e] (DefaultMap. default (.cons __map e)))
+    (equiv [this o] (.equals this o))
+    (containsKey [this k] true)
+    (entryAt [this k] (.entryAt __map k))
+    (seq [this] (.seq __map))
+    (assoc [this k v]
+      (DefaultMap. default (.assoc __map k v)))
+    (without [this k]
+      (DefaultMap. default (.without __map k)))
+
+    java.lang.Iterable
+    (iterator [this] (-> this .seq SeqIterator.))
+    )
+
+  (keys (->DefaultMap 42 {:a 23}))
+
+  ;; https://stackoverflow.com/questions/9225948/how-do-turn-a-java-iterator-like-object-into-a-clojure-sequence
+  (into {} (->DefaultMap 42 {:a 23}))
+  (bean (->DefaultMap 42 {:a 23}))
 
   ;; TODO: https://gist.github.com/kriyative/2642569
 

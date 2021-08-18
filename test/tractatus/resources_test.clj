@@ -56,25 +56,15 @@
 
 (def db (a/make-atomdb))
 
-(d/defdomain test-domain
-  (d/datasource db)
-  (d/resource :post))
+(r/defresource Post {:datasource db})
 
-#_(def post
-    (p/insert! db
-               {:tablename "posts" :primary-key :id}
-               {:title "Abstractions rule!"}))
-
-#_(p/find-by-id db {:tablename "posts"} (:id post))
-
-(r/reify-domain test-domain)
 
 (deftest insert!
   (is (= #{:id :title}
-         (set (keys (r/insert! Post {:title "Hello world"}))))))
+         (set (keys (r/insert! (->Post {:title "Hello world"})))))))
 
 (deftest find-by-id
-  (let [post (r/insert! Post {:title "Hello world"})]
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
     (is (= post
            (r/find-by-id Post (:id post))))))
 
