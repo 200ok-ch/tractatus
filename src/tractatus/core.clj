@@ -1,319 +1,475 @@
 (ns tractatus.core
-  "This namespace combines all tractatus namespaces for convenience."
-  (:require [tractatus.inflection :refer :all]
-            [tractatus.domain :refer :all]
-            [tractatus.resources :refer :all]))
+  (:require [tractatus
+             [protocols :as tp]
+             [inflection :as ti]]
+            [clojure.string :as str]))
 
-;; ;; 1. macros to work with the entity registry (ereg)
+;;; General Helpers
 
-;; (defmacro lazy-partial
-;;   "Like `partial` but as a macro."
-;;   [f & args]
-;;   `(fn [& args#]
-;;      (apply ~f ~@args args#)))
+(defn assert-fn
+  "Asserts that F is a function and returns f for threadability"
+  [f]
+  (assert (fn? f) (str "Expected function, found " (or (type f) "nil") "."))
+  f)
 
-;; (defmacro defn-with-registry
-;;   "Defines the given names as proxies to star-fns with the given
-;;   registry as the first parameter."
-;;   [ereg & names]
-;;   `(do
-;;      ~@(for [name# names]
-;;          (let [star-fn# (symbol (str name# "*"))]
-;;            `(def ~name#
-;;               (lazy-partial ~star-fn# ~ereg))))))
+(defn new*
+  "Slow instanciation without the use of any special forms."
+  [klass & args]
+  (clojure.lang.Reflector/invokeConstructor klass (to-array args)))
 
-;; (defmacro defregistry
-;;   "Defines a named registry and the functions rget, find,
-;;   create, update, delete in the current namespace."
-;;   [name & body]
-;;   `(do
-;;      (def ~name (-> {} ~@body))
-;;      (defn-with-registry ~name
-;;        rget
-;;        find
-;;        create
-;;        update
-;;        destroy)))
+(defn- arity
+  "Returns the arity of a function F"
+  [f]
+  {:pre [(instance? clojure.lang.AFunction f)]}
+  (-> f class .getDeclaredMethods first .getParameterTypes alength))
 
-;; ;; 2. Registry building helpers
+(defn make-tablename
+  "Takes a class C and returns a somewhat meaningful tablename"
+  [c]
+  (-> (.getName c)
+      (str/split #"\.")
+      last
+      ;; poor man's Pascal-/camel-case to snake-case
+      (str/replace #"([a-z])([A-Z])" "$1_$2")
+      str/lower-case
+      ti/pluralize))
 
-;; (defmacro register
-;;   "For use in a surrounding `defregistry`. Defines an entity. Takes a
-;;   symbol as name and a list of registry building helpers. You can
-;;   `assoc` to set options for which there are no helpers.
+;;; Callback Helpers
 
-;;   Function overrides
+(defn- run-callback
+  "Runs the given callback and interprets the result. Returns a
+  vector (tuple) of the potentially modified attributes map and a
+  vector of error maps."
+  [callback record hook]
+  (let [result (case (arity callback)
+                 2 (callback record hook)
+                 1 (callback record)
+                 (throw (ex-info
+                         "Wrong arity for callback"
+                         {:resource (name (type record))
+                          :hook hook})))]
+    (cond
+      ;; happy cases
+      (true? result) [record []]
+      (instance? (type record) result) [result []]
+      ;; unhappy cases
+      (false? result) [record [{:error "Unspecified Error"}]]
+      (string? result) [record [{:error result}]]
+      (sequential? result) [record result]
+      :default [record [{:error "Unknown Error" :object result}]])))
 
-;;     :get-fn      - takes an id (or emap) and returns an emap
-;;     :find-fn     - takes an sqlvec and returns a list of emap
-;;     :create-fn   - takes an emap
-;;     :updated-fn  - takes an emap
-;;     :destroy-fn  - takes an emap (or id)
+(defn run-callbacks [record hook fns]
+  (let [[callback & remaining] fns
+        [record¹ errors¹] (run-callback callback record hook)]
+    (if (or (empty? remaining) (some :halt errors¹))
+      [record¹ errors¹]
+      (let [[record² errors²] (run-callbacks record hook remaining)]
+        [record² (concat errors¹ errors²)]))))
 
-;;   For registered entities there are five functions to be called with
-;;   the entity type (etype) as the first parameter.
+;;; Defaults
 
-;;   For retrieving:
+;; TODO: use qualified keywords instead
+(def default-aspects
+  {:primary-key :id
+   :retrievable
+   {:find-by-id 'tractatus.persistence/find-by-id
+    :find-by-conditions 'tractatus.persistence/find-by-conditions}
+   :persistable
+   {:insert! 'tractatus.persistence/insert!
+    :update! 'tractatus.persistence/update!
+    :delete! 'tractatus.persistence/delete!}})
 
-;;     (rget etype id-or-emap) ; returns an emap
-;;     (find etype sqlvec) ; returns a sequential of emap
+;;; defresource
 
-;;   For persisting:
+(defmacro defresource [resource-name aspects]
+  ;; TODO: make take a form and make the form transform the aspects, similar to
+  ;;
+  ;; (defmacro defdomain
+  ;;   [domain-name & body]
+  ;;   `(def ~domain-name
+  ;;      (-> base-domain
+  ;;          ~@body
+  ;;          ;; (validate ::domain)
+  ;;          ;; TODO: use resulting data structure to setup resource records
+  ;;          )))
+  `(deftype ~resource-name [~'attrs]
 
-;;     (create etype emap)
-;;     (update etype emap)
-;;     (destroy etype emap-or-id)
+     ;; using the fully qualified protocols here for the
+     ;; sake of clarity
 
-;;   Persisting functions return a hashmap with...
+     java.lang.Iterable ; -----------------------------------------------
 
-;;     :entity   - an (possibly) updated entity map
-;;     :errors   - a sequential of error-maps
-;;     :affected - number of affected rows, if applicable
-;;     :success  - a boolean
+     ;; TODO: implement
+     ;; (forEach [this#]
+     ;;   this#)
 
-;;   The data structure of the registry will look like in this YAML
-;;   example:
+     (iterator [this#]
+       (-> this# .seq clojure.lang.SeqIterator.))
 
-;;   ---
-;;   group:
-;;     associations:
-;;       memberships:
-;;         cardinality: has-many
-;;       user:
-;;         cardinality: belongs-to
-;;   memberships:
-;;     associations:
-;;       user:
-;;         cardinality: belongs-to
-;;       group:
-;;         cardinality: belongs-to
-;;   user:
-;;     associations:
-;;       memberships:
-;;         cardinality: has-many
-;;   "
-;;   [ereg etype & body]
-;;   `(assoc ~ereg ~etype (-> {:tablename (inflection/pluralize (name ~etype))}
-;;                            ~@body)))
+     ;; TODO: implement
+     ;; (spliterator [this#]
+     ;;   this#)
 
-;; (defn tablename
-;;   "Overwrites the predefined table name."
-;;   [ereg name]
-;;   (assoc ereg :tablename name))
+     java.lang.Object ; -------------------------------------------------
 
-;; (defn- add-association [ereg entity-name cardinality]
-;;   (clojure.core/update ereg :associations merge {entity-name {:cardinality cardinality}}))
+     (hashCode [this#]
+       (reduce hash-combine
+               (.hashCode (keyword (str *ns*) (.getName ~resource-name)))
+               ~'attrs))
 
-;; (defn has-many [ereg entity-name]
-;;   (add-association ereg entity-name :has-many))
+     (equals [this# other#]
+       (boolean (or (identical? this# other#)
+                    (when (identical? (class this#) (class other#))
+                      (= ~'attrs (.attrs other#))))))
 
-;; (defn belongs-to [ereg entity-name]
-;;   (add-association ereg entity-name :belongs-to))
+     java.lang.Runnable ; -----------------------------------------------
 
-;; (defn- vectorify [value]
-;;   (if (sequential? value) value [value]))
+     ;; TODO: implement
+     ;; (run [#this]
+     ;;   #this)
 
-;; (defn- vectorify-values [a-map]
-;;   (reduce-kv (fn [m k v] (assoc m k (vectorify v))) {} a-map))
+     java.util.concurrent.Callable ; ------------------------------------
 
-;; (defn add-callbacks [ereg callback-map]
-;;   (clojure.core/update ereg :callbacks #(merge-with concat % (vectorify-values callback-map))))
+     ;; TODO: implement
+     ;; (call [#this]
+     ;;   #this)
 
-;; (defn add-callback
-;;   "To install a callback, `hook` is one of the following keywords:
+     ;; java.util.Map ; ----------------------------------------------------
 
-;;     :create
-;;     :created
-;;     :update
-;;     :updated
-;;     :destroy
-;;     :destroyed
+     ;; TODO: implement a ton of methods
 
-;;   and value is a callback function that takes
+     clojure.lang.Associative ; -----------------------------------------
 
-;;     etype - the entity type the callback was registered on
-;;     hook  - the keyword the callback was registered for
-;;     emap  - entity map of the entity currently being processed
+     (containsKey [this# key#]
+       (contains? ~'attrs key#))
 
-;;   and returns one of the following, in case of success:
+     (entryAt [this# key#]
+       (get ~'attrs key#))
 
-;;     true          - identity of emap, no errors
-;;     a map         - modified emap, no errors
+     (assoc [this# key# val#]
+       (new* (type this#) (assoc ~'attrs key# val#)))
 
-;;   xor one of the following, in case of failure:
+     clojure.lang.Counted ; ---------------------------------------------
 
-;;     false         - unspecified error
-;;     a string      - an error message
-;;     a vector/list - multiple errors
-;;     other         - error with error object
+     (count [this#]
+       (count ~'attrs))
 
-;;   If a before callback returns an error the action will not be
-;;   performed. If the errors key `:halt` evaluates to true the callback
-;;   chain will be halted entirely."
-;;   [ereg hook handler]
-;;   (add-callbacks ereg {hook [handler]}))
+     clojure.lang.IFn ; -------------------------------------------------
 
-;; 3. Automatic resolving of associations
-;;
-;; Here it gets a litle bit more tricky. In order to have nice
-;; semantics for resolving associations, we build on the fact that
-;; records unlike maps do not implement IFn. Meaning after we're done,
-;; our records will implement IFn to support automatic resolving of
-;; associations. Hence our upcoming retrieving and persisting function
-;; will have to return the emap wrapped into an
-;; EntityMap (record). The implementation of ILookup will be the
-;; same. So `(:a emap)` in cases where `:a` is an association will
-;; still return `nil`. But `(emap :a)` will resolve the association
-;; and return the emap of the associated entity.
+     (invoke [this# arg#]
+       (clojure.lang.ILookup/.valAt this# arg#))
 
-;; ;; TODO this is rather naive solution and should be based on the
-;; ;; central registry for entities
-;; (defn- resolve-strategy [emap key]
-;;   (cond
-;;     (contains? emap (keyword (str (name key) "_id")))
-;;     :belongs-to))
+     ;; clojure.lang.IKeywordLookup ; --------------------------------------
+     ;;
+     ;; (getLookupThunk [this# key#]
+     ;;   (get ~'attrs key#))
 
-;; (defmulti resolve-missing resolve-strategy)
+     clojure.lang.ILookup ; ---------------------------------------------
 
-;; (defmethod resolve-missing :default [emap key]
-;;   ;; TODO returning nil would be sane
-;;   (str "no value for " key))
+     (valAt [this# key#]
+       (get ~'attrs key#
+            ;; TODO: maybe fallback to retrieve associated
+            ;; fallback to lookup in aspects
+            (get (tp/aspects this#) key#)))
 
-;; (defmethod resolve-missing :belongs-to [emap key]
-;;   ;; TODO actually resolve entity
-;;   (str "resolving associated " key))
+     (valAt [this# key# default#]
+       (get ~'attrs key#
+            ;; TODO: maybe fallback to retrieve associated
+            ;; fallback to lookup in aspects
+            (get (tp/aspects this#) key# default#)))
 
-;; (defrecord EntityMap []
-;;   clojure.lang.IFn
-;;   (invoke [this key]
-;;     (or (get this key)
-;;         (resolve-missing this key))))
+     ;; TODO: add
+     ;; clojure.lang.IObj ; ------------------------------------------------
 
-;; ;; 4. callbacks
+     clojure.lang.IPersistentCollection ; -------------------------------
 
-;; (defn- run-callback
-;;   "Runs the given callback and interprets the result. Returns the
-;;   potentially modified emap and a vector of error maps."
-;;   [callback etype hook emap]
-;;   (let [result (callback etype hook emap)]
-;;     (cond
-;;       (true? result) [emap []]
-;;       (map? result) [result []]
-;;       (false? result) [emap [{:error "Unspecified Error"}]]
-;;       (sequential? result) [emap result]
-;;       (string? result) [emap [{:error result}]]
-;;       :default [emap [{:error "Unknown Error" :object result}]])))
+     ;; TODO: implement
+     ;; (cons [this# arg#]
+     ;;    this#)
 
-;; (defn- run-callbacks [etype hook emap fns]
-;;   ;; TODO use (let [[a & b] [1 2 4]] [a b])
-;;   (let [callback (first fns)
-;;         remaining (rest fns)
-;;         [emap1 errors1] (run-callback callback etype hook emap)]
-;;     (if (or (empty? remaining) (some :halt errors1))
-;;       [emap1 errors1]
-;;       (let [[emap2 errors2] (run-callbacks etype hook emap1 remaining)]
-;;         [emap2 (concat errors1 errors2)]))))
+     ;; (count [this#]
+     ;;   (count ~'attrs))
 
-;; (defn- callbacks
-;;   "Run all callbacks for a given combination emap, etype, & hook."
-;;   [emap ereg etype hook]
-;;   (if-let [fns (get-in ereg [etype :callbacks hook])]
-;;     (->> (run-callbacks etype hook emap fns)
-;;          (zipmap [:entity :errors]))
-;;     {:entity emap :errors []}))
+     (empty [this#]
+       (new* (type this#) {}))
 
-;; ;; 5. internal helpers
+     (equiv [this# arg#]
+       (.equals this# arg#))
 
-;; (defn- if-call
-;;   "If pred of value is true then return f of value, otherwise value."
-;;   [value pred f]
-;;   (if (pred value) (f value) value))
+     clojure.lang.IPersistentMap ; --------------------------------------
 
-;; (defn- report-errors [ctx action result]
-;;   (log/warn "A callback prevented" ctx "from being" action ":" (:errors result))
-;;   (assoc result :success false))
+     ;; (count [this] (.count __map))
 
-;; (defn- generic-persist [f table emap]
-;;   ;; TODO maybe move assertation to meta :pre
-;;   (assert (string? table) "table must be a string")
-;;   (f {:id (:id emap)
-;;       :table table
-;;       :keys (map name (keys emap))
-;;       :values (vals emap)}))
+     ;; (empty [this] (DefaultMap. default (.empty __map)))
 
-;; ;; 6. retrieving and persisting functions
+     ;; (cons [this e] (DefaultMap. default (.cons __map e)))
 
-;; ;; etype ("entity type") is a keyword that was previously registered
-;; ;; with `register`
+     ;; (equiv [this o] (.equals this o))
 
-;; ;; TODO add a callback to use for authorization
-;; ;; TODO rename to get
-;; (defn rget*
-;;   "Get an entity by id. Takes either an id or a hashmap with an :id
-;;   entry."
-;;   [ereg etype id-or-emap]
-;;   (let [get-fn (get-in ereg [etype :get-fn] db/get-entity)
-;;         id (if-call id-or-emap map? :id)
-;;         table (get-in ereg [etype :tablename])]
-;;     ;;(log/info table id get-fn)
-;;     (if-let [emap (first (get-fn {:table table :id id}))]
-;;       (map->EntityMap emap))))
+     ;; (containsKey [this k] true)
 
-;; ;; TODO add a callback to use for authorization
-;; (defn find*
-;;   "Find entities by conditions. The conditions are directly passed to
-;;   the :find-fn. Since the underlying HugSQL uses sqlvecs, this must be
-;;   an sqlvec."
-;;   ([ereg etype conditions]
-;;    (let [find-fn (get-in ereg [etype :find-fn] db/find-entities)
-;;          table (get-in ereg [etype :tablename])]
-;;      (map map->EntityMap (find-fn {:table table :conditions conditions}))))
-;;   ([ereg etype]
-;;    (find* etype ["1=1"])))
+     ;; (entryAt [this k] (.entryAt __map k))
 
-;; (defn create* [ereg etype emap]
-;;   (let [table (get-in ereg [etype :tablename])
-;;         create-fn (get-in ereg [etype :create-fn]
-;;                           (partial generic-persist db/create-entity table))
-;;         result (callbacks emap ereg etype :create)]
-;;     (if (empty? (:errors result))
-;;       (-> (create-fn (:entity result))
-;;           (callbacks ereg etype :created)
-;;           ;; NOTE `:affected 1` is only to be API-compatible to
-;;           ;; what we had already
-;;           (assoc :success true :affected 1)
-;;           (clojure.core/update :entity map->EntityMap))
-;;       (report-errors (name etype) "created" result))))
+     ;; (seq [this#]
+     ;;   (.seq ~'attrs))
 
-;; (defn- rget-helper
-;;   "Reverses the arguments so it can be used in a thread first."
-;;   [emap etype ereg]
-;;   (rget* ereg etype emap))
+     ;; (assoc [this k v]
+     ;;   (DefaultMap. default (.assoc __map k v)))
 
-;; (defn update* [ereg etype emap]
-;;   (let [table (get-in ereg [etype :tablename])
-;;         update-fn (get-in ereg [etype :update-fn]
-;;                           (partial generic-persist db/update-entity table))
-;;         result (callbacks emap ereg etype :update)]
-;;     (if (empty? (:errors result))
-;;       (let [affected (update-fn (:entity result))]
-;;         (-> (:entity result)
-;;             (rget-helper etype ereg)
-;;             (callbacks ereg etype :updated)
-;;             (assoc :success true :affected affected)
-;;             (clojure.core/update :entity map->EntityMap)))
-;;       (report-errors (name etype) "updated" result))))
+     (without [this# key#]
+       (new* (type this#) (.without ~'attrs key#)))
 
-;; (defn destroy* [ereg etype emap-or-id]
-;;   (let [table (get-in ereg [etype :tablename])
-;;         destroy-fn (get-in ereg [etype :destroy-fn]
-;;                            (partial db/delete-entity table))
-;;         emap1 (if (map? emap-or-id) emap-or-id {:id emap-or-id})
-;;         result (callbacks emap1 ereg etype :destroy)]
-;;     (if (empty? (:errors result))
-;;       (let [affected (destroy-fn (:entity result))]
-;;         (-> (:entity result)
-;;             (callbacks ereg etype :destroyed)
-;;             (assoc :success true :affected affected)
-;;             (clojure.core/update :entity map->EntityMap)))
-;;      (report-errors (name etype) "destroyed" result))))
+     clojure.lang.Seqable ; ---------------------------------------------
+
+     (seq [this#]
+       (.seq ~'attrs))
+
+     ;; our own stuff follows ===========================================
+
+     tractatus.protocols.IAspects ; -------------------------------------
+
+     (aspects [this#]
+       ;; TODO: deep merge
+       (merge default-aspects
+              {:tablename (make-tablename ~resource-name)}
+              ~aspects))
+
+     tractatus.protocols.IAttributes ; ----------------------------------
+
+     (attributes [this#]
+       ~'attrs)
+
+     tractatus.protocols.Retrievable ; ----------------------------------
+
+     (find-by-id [this# id#]
+       (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
+       (if-let [attrs#
+                ((get (tp/aspects this#) :transform-on-read identity)
+                 ((-> this# tp/aspects :retrievable :find-by-id resolve deref assert-fn)
+                  (-> this# tp/aspects :datasource)
+                  (select-keys (tp/aspects this#) [:tablename :primary-key])
+                  id#))]
+         (new* (type this#) attrs#)
+         nil)) ; if not found return nil
+
+     (find-by-conditions [this# conditions#]
+       (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
+       (not-empty ; if not found instead of an empty list return nil
+        (map
+         (comp
+          (partial new* (type this#))
+          (get (tp/aspects this#) :transformable-on-read identity))
+         ((-> this# tp/aspects :retrievable :find-by-conditions resolve deref assert-fn)
+          (-> this# tp/aspects :datasource)
+          (select-keys (tp/aspects this#) [:tablename :primary-key])
+          conditions#))))
+
+     tractatus.protocols/Persistable ; ----------------------------------
+
+     (insert! [this#]
+       (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
+       (new* (type this#)
+             ((get (tp/aspects this#) :transform-on-read identity)
+              ((-> this# tp/aspects :persistable :insert! resolve deref assert-fn)
+               (-> this# tp/aspects :datasource)
+               (select-keys (tp/aspects this#) [:tablename :primary-key])
+               ((get (tp/aspects this#) :transform-on-write identity) ~'attrs)))))
+
+     (update! [this#]
+       (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
+       (new* (type this#)
+             ((get (tp/aspects this#) :transform-on-read identity)
+              ((-> this# tp/aspects :persistable :update! resolve deref assert-fn)
+               (-> this# tp/aspects :datasource)
+               (select-keys (tp/aspects this#) [:tablename :primary-key])
+               ((get (tp/aspects this#) :transform-on-write identity) ~'attrs)))))
+
+     (delete! [this#]
+       (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
+       (new* (type this#)
+             ((get (tp/aspects this#) :transform-on-read identity)
+              ((-> this# tp/aspects :persistable :delete! resolve deref assert-fn)
+               (-> this# tp/aspects :datasource)
+               (select-keys (tp/aspects this#) [:tablename :primary-key])
+               ((-> this# tp/aspects :primary-key) ~'attrs)))))
+
+     tractatus.protocols.Callbackable ; ---------------------------------
+
+     (callbacks [this# hook#]
+       (if-let [fns# (get-in (tp/aspects this#) [:callbacks hook#])]
+         (->> (run-callbacks this# hook# fns#)
+              (zipmap [:record :errors]))
+         {:record this# :errors []}))
+
+     tractatus.protocols.Lifecyclable ; ---------------------------------
+
+     (create! [this#]
+       (let [result¹# (tp/callbacks this# :create)]
+         (if (-> result¹# :errors empty?)
+           (let [result²# (tp/callbacks (tp/insert! (:record result¹#)) :created)]
+             (if (-> result²# :errors empty?)
+               (:record result²#)
+               ;; TODO: rollback
+               (throw (ex-info "Error in callback after create w/o rollback" result²#))))
+           (throw (ex-info "Failed to create" result¹#)))))
+
+     (modify! [this#]
+       (let [result¹# (tp/callbacks this# :modify)]
+         (if (-> result¹# :errors empty?)
+           (let [result²# (tp/callbacks (tp/update! (:record result¹#)) :modified)]
+             (if (-> result²# :errors empty?)
+               (:record result²#)
+               ;; TODO: rollback
+               (throw (ex-info "Error in callback after modify w/o rollback" result²#))))
+           (throw (ex-info "Failed to modify" result¹#)))))
+
+     (destroy! [this#]
+       (let [result¹# (tp/callbacks this# :destroy)]
+         (if (-> result¹# :errors empty?)
+           (let [result²# (tp/callbacks (tp/delete! (:record result¹#)) :destroyed)]
+             (if (-> result²# :errors empty?)
+               (:record result²#)
+               ;; TODO: rollback
+               (throw (ex-info "Error in callback after destroy w/o rollback" result²#))))
+           (throw (ex-info "Failed to destroy" result¹#)))))
+
+     ;; tractatus.protocols.IInspect ; -------------------------------------
+     ;; (inspect [this#]
+     ;;   (new* (type this#) {}))
+
+     ))
+
+;;; Delegation and syntactic sugar
+
+(def aspects tp/aspects)
+
+(def attributes tp/attributes)
+
+(defn find-by-id [resource-class id]
+  (tp/find-by-id (new* resource-class {}) id))
+
+(defn find-by-conditions [resource-class conditions]
+  (tp/find-by-conditions (new* resource-class {}) conditions))
+
+(def insert! tp/insert!)
+
+(def update! tp/update!)
+
+(defn delete!
+  ([resource]
+   (tp/delete! resource))
+  ([resource-class id]
+   (let [{:keys [primary-id]} (aspects (new* resource-class {}))]
+     (delete! (new* resource-class {primary-id id})))))
+
+(def create! tp/create!)
+
+(def modify! tp/modify!)
+
+(defn destroy!
+  ([resource]
+   (tp/destroy! resource))
+  ([resource-class id]
+   (let [{:keys [primary-id]} (aspects (new* resource-class {}))]
+     (destroy! (new* resource-class {primary-id id})))))
+
+;;; Notes
+
+(comment
+
+  (require '[tractatus.persistence.atom :as ta])
+
+  (def db (ta/make-atomdb))
+
+  (defresource Monkey
+    {:datasource db
+     ::name :monkey})
+  ;; create instance
+  (def monkey (->Monkey {:name "Bubbles" :banana true}))
+  ;; lookup attributes
+  (:banana monkey)
+  (monkey :banana)
+  (monkey :name)
+  (:name monkey)
+  ;; lookup spec data
+  (::name monkey)
+  (monkey ::name)
+
+  (assoc monkey :name "Donkey Kong")
+  (assoc monkey
+         :name "Donkey Kong"
+         :age 5)
+  ((assoc monkey :name "Donkey Kong") :name)
+
+  (def saved-monkey (create! monkey))
+  (:id saved-monkey)
+  (attributes monkey)
+  (attributes saved-monkey)
+  (find-by-id Monkey (:id saved-monkey))
+  (find-by-conditions Monkey {:name "Bubbles"})
+
+  ;; https://gist.github.com/michalmarczyk/468332
+  (deftype DefaultMap [default __map]
+    Object
+    (hashCode [this] (reduce hash-combine
+                             (keyword (str *ns*) "DefaultMap")
+                             default
+                             __map))
+    (equals [this other]
+      (boolean (or (identical? this other)
+                   (when (identical? (class this) (class other))
+                     (every? true? (map = [default __map]
+                                        [(.default other)
+                                         (.__map other)]))))))
+    clojure.lang.IObj
+    (meta [this] (.meta __map))
+    (withMeta [this m]
+      (DefaultMap. default (.withMeta __map m)))
+    clojure.lang.ILookup
+    (valAt [this k] (.valAt __map k default))
+    (valAt [this k else] (.valAt __map k else))
+    clojure.lang.IKeywordLookup
+    (getLookupThunk [this k]
+      (reify clojure.lang.ILookupThunk
+        (get [thunk target]
+          (if (identical? (class target) (class this))
+            (.valAt this k)))))
+    clojure.lang.IPersistentMap
+    (count [this] (.count __map))
+    (empty [this] (DefaultMap. default (.empty __map)))
+    (cons [this e] (DefaultMap. default (.cons __map e)))
+    (equiv [this o] (.equals this o))
+    (containsKey [this k] true)
+    (entryAt [this k] (.entryAt __map k))
+    (seq [this] (.seq __map))
+    (assoc [this k v]
+      (DefaultMap. default (.assoc __map k v)))
+    (without [this k]
+      (DefaultMap. default (.without __map k)))
+
+    java.lang.Iterable
+    (iterator [this] (-> this .seq SeqIterator.))
+    )
+
+  (keys (->DefaultMap 42 {:a 23}))
+
+  ;; https://stackoverflow.com/questions/9225948/how-do-turn-a-java-iterator-like-object-into-a-clojure-sequence
+  (into {} (->DefaultMap 42 {:a 23}))
+  (bean (->DefaultMap 42 {:a 23}))
+
+  ;; TODO: https://gist.github.com/kriyative/2642569
+
+  (defmacro mkfn [fns]
+    `(do
+       ~@(for [fn# fns]
+           `(defn ~(symbol fn#) []
+              ~fn#))))
+
+  (macroexpand '(mkfn [:a]))
+
+  (mkfn [:a :b :c])
+
+  (a)
+  (b)
+  (c)
+  )

@@ -1,87 +1,24 @@
-(ns tractatus.domain
-  "A domain describes resources. This namespace provides a comprehensive
-  specification (in spec) of the data structure that represents a
-  domain as well as a DSL to build domains programmtically."
-  (:require [clojure.spec.alpha :as s]
-            [tractatus.inflection :as ti]
+(ns tractatus.dsl
+  (:require [tractatus.inflection :as ti]
             [tractatus.persistence :as tp]))
 
-;; TODO: switch to fully qualified namespaces
-
-;;; specification of the domain data structure
-
-(s/def ::name keyword?)
-
-(s/def ::resource-name keyword?)
-
-(s/def ::cardinality #{:belongs-to :has-many})
-
-(s/def ::association (s/keys :req-un [::name
-                                      ::resource-name
-                                      ::cardinality]))
-
-(s/def ::associations (s/coll-of ::association))
-
-(s/def ::callback-name #{:create
-                         :created
-                         :modify
-                         :modified
-                         :destroy
-                         :destroyed})
-
-(s/def ::callback fn?)
-
-(s/def ::callbacks (s/map-of ::callback-name
-                             (s/coll-of ::callback)))
-
-(s/def ::retrievable (s/map-of #{:find-by-id :find-by-conditions} fn?))
-
-(s/def ::persistable (s/map-of #{:insert! :update! :delete!} fn?))
-
-(s/def ::tablename string?)
-
-(s/def ::primary-key keyword?)
-
-(s/def ::resource (s/keys :req-un [::name]
-                          :opt-un [::tablename
-                                   ::primary-key
-                                   ::associations
-                                   ::callbacks
-                                   ::retrievable
-                                   ::persistable]))
-
-(s/def ::resources (s/map-of ::resource-name
-                             ::resource))
-
-(s/def ::domain (s/keys :opt-un [::primary-key
-                                 ::resources]))
-
-;; threadable domain validation helper
-
-(defn validate [domain spec]
-  (when-not (s/valid? spec domain)
-    (throw (ex-info "Invalid resource domain"
-                    (s/explain-data spec domain))))
-  ;; return domain so validate can be used in threading macros
-  domain)
-
-;;; DSL to build domains programmtically
+;;; DSL to build resource aspects programmtically
 
 (defn datasource
-  [domain ds]
-  (assoc domain :datasource ds))
+  [aspects ds]
+  (assoc aspects :datasource ds))
 
 (defn retrievable
-  [domain fn-map]
-  (assoc domain :retrievable fn-map))
+  [aspects fn-map]
+  (assoc aspects :retrievable fn-map))
 
 (defn persistable
-  [domain fn-map]
-  (assoc domain :persistable fn-map))
+  [aspects fn-map]
+  (assoc aspects :persistable fn-map))
 
 (defn transformable
-  [domain fn-map]
-  (assoc domain :transformable fn-map))
+  [aspects fn-map]
+  (assoc aspects :transformable fn-map))
 
 ;; (def ^:private merge-with-concat
 ;;   (partial merge-with concat))
@@ -89,39 +26,16 @@
 ;; #_(update {:a {:b [:c]}} :a merge-with-concat {:b [:d]})
 ;;
 ;; (defn add-transformations
-;;   [domain value]
-;;   (update domain :transformable merge-with-concat value))
+;;   [aspects value]
+;;   (update aspects :transformable merge-with-concat value))
 ;;
 ;; (defn add-read-transformation
-;;   [domain f]
-;;   (add-transformations domain {:read [f]}))
+;;   [aspects f]
+;;   (add-transformations aspects {:read [f]}))
 ;;
 ;; (defn add-write-transformation
-;;   [domain f]
-;;   (add-transformations domain {:write [f]}))
-
-;; TODO: check if there is a better way than passing quoted symbols,
-;; which require a resolve-deref on the other side
-(def base-domain
-  (-> {:primary-key :id}
-      (retrievable {:find-by-id 'tractatus.persistence/find-by-id
-                    :find-by-conditions 'tractatus.persistence/find-by-conditions})
-      (persistable {:insert! 'tractatus.persistence/insert!
-                    :update! 'tractatus.persistence/update!
-                    :delete! 'tractatus.persistence/delete!})
-      ;; (datasource (tractatus.persistence.atom/make-atomdb))
-      ))
-
-(defmacro defdomain
-  [domain-name & body]
-  `(def ~domain-name
-     (-> base-domain
-         ~@body
-         ;; (validate ::domain)
-         ;; TODO: use resulting data structure to setup resource records
-         )))
-
-#_(defdomain my-domain)
+;;   [aspects f]
+;;   (add-transformations aspects {:write [f]}))
 
 (def inherited-attributes
   [:primary-key
@@ -131,6 +45,7 @@
    :transformable
    :callbacks])
 
+;; TODO: thos should probably be renamed to `base` pr something like that
 (defmacro resource
   [domain resource-name & body]
   `(assoc-in ~domain

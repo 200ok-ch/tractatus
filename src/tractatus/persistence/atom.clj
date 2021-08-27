@@ -1,4 +1,5 @@
-(ns tractatus.persistence.atom)
+(ns tractatus.persistence.atom
+  (:require tractatus.persistence))
 
 ;; TODO: use deftype instead
 (defrecord AtomDB [atom])
