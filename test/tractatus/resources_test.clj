@@ -3,9 +3,14 @@
             [tractatus.resources :as r]
             [tractatus.domain :as d]
             [tractatus.persistence :as p]
-            [tractatus.persistence.atom :as a]))
+            [tractatus.persistence.atom :as a])
+  (:import [java.lang AssertionError]))
 
-;; TODO: maybe test assert-fn
+(deftest assert-fn
+  (is (thrown? AssertionError (r/assert-fn nil)))
+  (is (thrown? AssertionError (r/assert-fn 42)))
+  (is (= identity (r/assert-fn identity)))
+  (is (= r/assert-fn (r/assert-fn r/assert-fn))))
 
 (deftest new*
   (is (instance? Integer
@@ -25,14 +30,17 @@
 (deftest make-tablename
   (are [a b] (= a b)
     "strings" (r/make-tablename String)
-    "hane-bambels" (r/make-tablename (deftype HaneBambel []))))
+    "hane_bambels" (r/make-tablename (deftype HaneBambel []))
+    "octopi" (r/make-tablename (deftype Octopus []))))
 
 (defrecord SomeRecord [x])
 
 (def record (->SomeRecord 42))
 
 (deftest run-callback ;; callback record hook
-  (are [errors callback] (= [record errors] (#'r/run-callback callback record :some-hook))
+  (are [errors callback]
+      (= [record errors]
+         (#'r/run-callback callback record :some-hook))
     ;; happy cases
     [] (constantly true)
     [] identity
@@ -47,17 +55,14 @@
 ;; TODO: maybe test run-callbacks
 
 ;; NOTE: from here state is involved in testing
-
 (r/defresource Resource0 {:x 42})
 
 (deftest aspects
   (is (= 42 (-> {} ->Resource0 r/aspects :x))))
 
-
 (def db (a/make-atomdb))
 
 (r/defresource Post {:datasource db})
-
 
 (deftest insert!
   (is (= #{:id :title}
@@ -68,21 +73,45 @@
     (is (= post
            (r/find-by-id Post (:id post))))))
 
-;; TODO: test find-by-conditions
+(deftest find-by-conditions
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
+    (is (= post
+           (first (r/find-by-conditions Post {:id (:id post)}))))))
 
-;; TODO: test update!
+(defn in?
+  "true if coll contains elm"
+  [coll elm]
+  (some #(= elm %) coll))
 
-;; TODO: test delete!
+(deftest find-by-conditions-2
+  (let [post (r/insert! (->Post {:title "Hello world!"}))]
+    (is ((set (r/find-by-conditions Post {:title "Hello world!"})) post))))
+
+(deftest update!
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
+    (r/update! (assoc post :title "Brave new title"))
+    (is (= "Brave new title" (:title (r/find-by-id Post (:id post)))))))
+
+(deftest delete!
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
+    (r/delete! post)
+    (is (nil? (r/find-by-id Post (:id post))))))
 
 ;; TODO: test callbacks
 
-;; TODO: test create!
+(deftest create!
+  (is (= #{:id :title}
+         (set (keys (r/create! (->Post {:title "Hello world"})))))))
 
-;; TODO: test modify!
+(deftest modify!
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
+    (r/modify! (assoc post :title "Brave new title"))
+    (is (= "Brave new title" (:title (r/find-by-id Post (:id post)))))))
 
-;; TODO: test destroy!
-
-;; TODO: test reify-domain
+(deftest destroy!
+  (let [post (r/insert! (->Post {:title "Hello world"}))]
+    (r/destroy! post)
+    (is (nil? (r/find-by-id Post (:id post))))))
 
 (r/defresource Monkey
   {::likes :banana})

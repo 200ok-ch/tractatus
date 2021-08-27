@@ -4,7 +4,7 @@
             [tractatus.protocols :as tp]
             [clojure.string :as str]
             [tractatus.inflection :as ti])
-  (:import [clojure.lang ILookup IFn Associative IPersistentCollection SeqIterator]))
+  (:import [clojure.lang ILookup IFn Associative IPersistentCollection SeqIterator Seqable]))
 
 ;;; General Helpers
 
@@ -31,7 +31,8 @@
   (-> (.getName c)
       (str/split #"\.")
       last
-      (str/replace #"([a-z])([A-Z])" "$1-$2")
+      ;; poor man's Pascal-/camel-case to snake-case
+      (str/replace #"([a-z])([A-Z])" "$1_$2")
       str/lower-case
       ti/pluralize))
 
@@ -85,58 +86,51 @@
 (defmacro defresource [resource-name aspects]
   `(deftype ~resource-name [~'attrs]
 
-    Object
-    (hashCode [this] (reduce hash-combine
-                             (keyword (str *ns*) (.getName ~resource-name))
-                             ~'attrs))
-    (equals [this other]
-      (boolean (or (identical? this other)
-                   (when (identical? (class this) (class other))
-                     (= ~'attrs (.~'attrs other))))))
+     ;; using the fully qualified protocols here for the
+     ;; sake of clarity
 
-
-    tp/IAspects
-
-     (aspects [this#]
-       ;; TODO: deep merge
-       (merge default-aspects
-              {:tablename (make-tablename ~resource-name)}
-              ~aspects))
-
-     tp/IAttributes
-
-     (attributes [this#]
-       ~'attrs)
-
-     clojure.lang.ILookup ;; (:name monkey)
-
-     (valAt [this# key#]
-       (get ~'attrs key#
-            ;; TODO: maybe fallback to retrieve associated
-            ;; fallback to lookup in aspects
-            (get (tp/aspects this#) key#)))
-
-     IFn ;; (monkey :name)
-
-     (invoke [this# arg#]
-       (clojure.lang.ILookup/.valAt this# arg#))
-
-     IPersistentCollection
-
-     (count [this#]
-       (count ~'attrs))
+     java.lang.Iterable ; -----------------------------------------------
 
      ;; TODO: implement
-     (cons [this# arg#]
-       this#)
+     ;; (forEach [this#]
+     ;;   this#)
 
-     (empty [this#]
-       (new* (type this#) {}))
+     (iterator [this#]
+       (-> this# .seq SeqIterator.))
 
-     (equiv [this# arg#]
-       (= ~'attrs arg#))
+     ;; TODO: implement
+     ;; (spliterator [this#]
+     ;;   this#)
 
-     Associative
+     java.lang.Object ; -------------------------------------------------
+
+     (hashCode [this#]
+       (reduce hash-combine
+               (.hashCode (keyword (str *ns*) (.getName ~resource-name)))
+               ~'attrs))
+
+     (equals [this# other#]
+       (boolean (or (identical? this# other#)
+                    (when (identical? (class this#) (class other#))
+                      (= ~'attrs (.attrs other#))))))
+
+     java.lang.Runnable ; -----------------------------------------------
+
+     ;; TODO: implement
+     ;; (run [#this]
+     ;;   #this)
+
+     java.util.concurrent.Callable ; ------------------------------------
+
+     ;; TODO: implement
+     ;; (call [#this]
+     ;;   #this)
+
+     ;; java.util.Map ; ----------------------------------------------------
+
+     ;; TODO: implement a ton of methods
+
+     clojure.lang.Associative ; -----------------------------------------
 
      (containsKey [this# key#]
        (contains? ~'attrs key#))
@@ -147,7 +141,97 @@
      (assoc [this# key# val#]
        (new* (type this#) (assoc ~'attrs key# val#)))
 
-     tp/Retrievable
+     clojure.lang.Counted ; ---------------------------------------------
+
+     (count [this#]
+       (count ~'attrs))
+
+     clojure.lang.IFn ; -------------------------------------------------
+
+     (invoke [this# arg#]
+       (clojure.lang.ILookup/.valAt this# arg#))
+
+     ;; clojure.lang.IKeywordLookup ; --------------------------------------
+     ;;
+     ;; (getLookupThunk [this# key#]
+     ;;   (get ~'attrs key#))
+
+     clojure.lang.ILookup ; ---------------------------------------------
+
+     (valAt [this# key#]
+       (get ~'attrs key#
+            ;; TODO: maybe fallback to retrieve associated
+            ;; fallback to lookup in aspects
+            (get (tp/aspects this#) key#)))
+
+     (valAt [this# key# default#]
+       (get ~'attrs key#
+            ;; TODO: maybe fallback to retrieve associated
+            ;; fallback to lookup in aspects
+            (get (tp/aspects this#) key# default#)))
+
+     ;; TODO: add
+     ;; clojure.lang.IObj ; ------------------------------------------------
+
+     clojure.lang.IPersistentCollection ; -------------------------------
+
+     ;; TODO: implement
+     ;; (cons [this# arg#]
+     ;;    this#)
+
+     ;; (count [this#]
+     ;;   (count ~'attrs))
+
+     (empty [this#]
+       (new* (type this#) {}))
+
+     (equiv [this# arg#]
+       (.equals this# arg#))
+
+     clojure.lang.IPersistentMap ; --------------------------------------
+
+     ;; (count [this] (.count __map))
+
+     ;; (empty [this] (DefaultMap. default (.empty __map)))
+
+     ;; (cons [this e] (DefaultMap. default (.cons __map e)))
+
+     ;; (equiv [this o] (.equals this o))
+
+     ;; (containsKey [this k] true)
+
+     ;; (entryAt [this k] (.entryAt __map k))
+
+     ;; (seq [this#]
+     ;;   (.seq ~'attrs))
+
+     ;; (assoc [this k v]
+     ;;   (DefaultMap. default (.assoc __map k v)))
+
+     (without [this# key#]
+       (new* (type this#) (.without ~'attrs key#)))
+
+     clojure.lang.Seqable ; ---------------------------------------------
+
+     (seq [this#]
+       (.seq ~'attrs))
+
+     ;; our own stuff follows ===========================================
+
+     tractatus.protocols.IAspects ; -------------------------------------
+
+     (aspects [this#]
+       ;; TODO: deep merge
+       (merge default-aspects
+              {:tablename (make-tablename ~resource-name)}
+              ~aspects))
+
+     tractatus.protocols.IAttributes ; ----------------------------------
+
+     (attributes [this#]
+       ~'attrs)
+
+     tractatus.protocols.Retrievable ; ----------------------------------
 
      (find-by-id [this# id#]
        (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
@@ -172,7 +256,7 @@
           (select-keys (tp/aspects this#) [:tablename :primary-key])
           conditions#))))
 
-     tp/Persistable
+     tractatus.protocols/Persistable ; ----------------------------------
 
      (insert! [this#]
        (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
@@ -201,7 +285,7 @@
                (select-keys (tp/aspects this#) [:tablename :primary-key])
                ((-> this# tp/aspects :primary-key) ~'attrs)))))
 
-     tp/Callbackable
+     tractatus.protocols.Callbackable ; ---------------------------------
 
      (callbacks [this# hook#]
        (if-let [fns# (get-in (tp/aspects this#) [:callbacks hook#])]
@@ -209,7 +293,7 @@
               (zipmap [:record :errors]))
          {:record this# :errors []}))
 
-     tp/Lifecyclable
+     tractatus.protocols.Lifecyclable ; ---------------------------------
 
      (create! [this#]
        (let [result¹# (tp/callbacks this# :create)]
@@ -241,7 +325,7 @@
                (throw (ex-info "Error in callback after destroy w/o rollback" result²#))))
            (throw (ex-info "Failed to destroy" result¹#)))))
 
-     ;; tp/IInspect
+     ;; tractatus.protocols.IInspect ; -------------------------------------
      ;; (inspect [this#]
      ;;   (new* (type this#) {}))
 
@@ -281,6 +365,8 @@
    (let [{:keys [primary-id]} (aspects (new* resource-class {}))]
      (destroy! (new* resource-class {primary-id id})))))
 
+;;; Notes
+
 (comment
 
   (require '[tractatus.persistence.atom :as ta])
@@ -313,11 +399,6 @@
   (attributes saved-monkey)
   (find-by-id Monkey (:id saved-monkey))
   (find-by-conditions Monkey {:name "Bubbles"})
-  )
-
-;;; Notes
-
-(comment
 
   ;; https://gist.github.com/michalmarczyk/468332
   (deftype DefaultMap [default __map]
