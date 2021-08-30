@@ -1,6 +1,6 @@
-(ns tractatus.domain-test
+(ns tractatus.dsl-test
   (:require [clojure.test :refer :all]
-            [tractatus.domain :as d]))
+            [tractatus.dsl :as d]))
 
 (deftest datasource
   (is (= {:datasource {:some "datasource"}}
@@ -30,23 +30,23 @@
 
 ;; TODO: maybe test add-association
 
-(deftest has-many
-  (is (= {:a 1
-          :associations
-          {:heads
-           {:cardinality :has-many
-            :resource-name :heads
-            :name :heads}}}
-         (d/has-many {:a 1} :heads))))
-
-(deftest belongs-to
-  (is (= {:a 1
-          :associations
-          {:ship
-           {:cardinality :belongs-to
-            :resource-name :ship
-            :name :ship}}}
-         (d/belongs-to {:a 1} :ship))))
+;; (deftest has-many
+;;   (is (= {:a 1
+;;           :associations
+;;           {:heads
+;;            {:cardinality :has-many
+;;             :resource-name :heads
+;;             :name :heads}}}
+;;          (d/has-many {:a 1} :heads))))
+;;
+;; (deftest belongs-to
+;;   (is (= {:a 1
+;;           :associations
+;;           {:ship
+;;            {:cardinality :belongs-to
+;;             :resource-name :ship
+;;             :name :ship}}}
+;;          (d/belongs-to {:a 1} :ship))))
 
 ;; TODO: maybe test vectorify
 
