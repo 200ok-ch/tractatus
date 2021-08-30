@@ -1,4 +1,4 @@
-[[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]\
+[[https://github.com/200ok-ch/tractatus/actions/workflows/clojure.yml/badge.svg]]
 
 * tractatus
   :PROPERTIES:
