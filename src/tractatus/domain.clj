@@ -104,7 +104,8 @@
 #_(defdomain my-domain)
 
 (def inherited-attributes
-  [:datasource
+  [:primary-key
+   :datasource
    :retrievable
    :persistable])
 
