@@ -239,7 +239,7 @@
      (attributes [this#]
        ~'attrs)
 
-     tractatus.protocols.Retrievable ; ----------------------------------
+     tractatus.protocols/Retrievable ; ----------------------------------
 
      (find-by-id [this# id#]
        (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
@@ -258,7 +258,7 @@
         (map
          (comp
           (partial new* (type this#))
-          (get (tp/aspects this#) :transformable-on-read identity))
+          (get (tp/aspects this#) :transform-on-read identity))
          ((-> this# tp/aspects :retrievable :find-by-conditions resolve deref assert-fn)
           (-> this# tp/aspects :datasource)
           (select-keys (tp/aspects this#) [:tablename :primary-key])
