@@ -32,6 +32,38 @@
     "hane_bambels" (t/make-tablename (deftype HaneBambel []))
     "octopi" (t/make-tablename (deftype Octopus []))))
 
+(deftest ref-attr
+  (is (= :thing_ids (#'t/ref-attr :things))))
+
+(deftest apply-association
+  (testing "has-many"
+    (is (= {:thing_ids [1 2]}
+           (#'t/apply-association {:things [{:id 1} {:id 2}]}
+                                  [:things {:cardinality :has-many}]))))
+  ;; (testing "belongs-to"
+  ;;   (is (= {:thing_id 1}
+  ;;          (#'t/apply-association {:thing {:id 1}}
+  ;;                                 [:thing {:cardinality :belongs-to}]))))
+  )
+
+(deftest apply-associations
+  (testing "has-many"
+    (is (= {:thing_ids [1 2]}
+           (#'t/apply-associations {:things {:cardinality :has-many}}
+                                   {:things [{:id 1} {:id 2}]}))))
+  ;; (testing "belongs-to"
+  ;;   (is (= {:thing_id 1}
+  ;;          (#'t/apply-associations {:thing {:cardinality :belongs-to}}
+  ;;                                  {:thing {:id 1}}))))
+  ;; (testing "both"
+  ;;   (is (= {:thing_id 1
+  ;;           :thing_ids [2 3]}
+  ;;          (#'t/apply-associations {:thing {:cardinality :belongs-to}
+  ;;                                   :things {:cardinality :has-many}}
+  ;;                                  {:thing {:id 1}
+  ;;                                   :things [{:id 2} {:id 3}]}))))
+  )
+
 (defrecord SomeRecord [x])
 
 (def record (->SomeRecord 42))
@@ -149,3 +181,21 @@
       (is (= "Donkey Kong" (:name new-monkey)))
       (is (= 1981 (:year new-monkey)))
       (is (instance? Monkey new-monkey)))))
+
+(t/defresource Force
+  {:datasource db
+   :associations {:things {:cardinality :has-many
+                           :resource-name :thing}}})
+
+(t/defresource Thing
+  {:datasource db
+   :associations {:force {:cardinality :belongs-to
+                          :resource-name :force}}})
+
+;; (deftest defresource-2
+;;   (testing "create resource with associated resources"
+;;     (let [petunias (t/create! (->Thing {:name "bowl of petunias"}))
+;;           whale (t/create! (->Thing {:name "whale"}))
+;;           {:keys [id]} (t/create! (->Force {:name "gravity" :things [petunias whale]}))
+;;           gravity (t/find-by-id Force id)]
+;;       (is (= [:name :id :thing_ids] (keys gravity))))))
