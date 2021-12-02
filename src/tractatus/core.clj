@@ -34,6 +34,21 @@
       str/lower-case
       ti/pluralize))
 
+(defn- ref-attr
+  "The default ref-attr builder. Takes a keyword and returns a
+  keyword. E.g. `:things` -> `:thing_ids`."
+  [attr-name]
+  (keyword (str (ti/singularize (name attr-name)) "_ids")))
+
+(defn- apply-association [attrs [assoc-name assoc-aspects]]
+  (-> attrs
+      (assoc (or (:ref-attr assoc-aspects) (ref-attr assoc-name))
+             (map (or (:foreign-key assoc-aspects) :id) (assoc-name attrs)))
+      (dissoc assoc-name)))
+
+(defn- apply-associations [assocs attrs]
+  (reduce apply-association attrs assocs))
+
 ;;; Callback Helpers
 
 (defn- run-callback
@@ -273,7 +288,8 @@
               ((-> this# tp/aspects :persistable :insert! resolve deref assert-fn)
                (-> this# tp/aspects :datasource)
                (select-keys (tp/aspects this#) [:tablename :primary-key])
-               ((get (tp/aspects this#) :transform-on-write identity) ~'attrs)))))
+               ((get (tp/aspects this#) :transform-on-write identity)
+                (apply-associations (-> this# tp/aspects :associations) ~'attrs))))))
 
      (update! [this#]
        (assert (-> this# tp/aspects :datasource) "Oops, no datasource?")
