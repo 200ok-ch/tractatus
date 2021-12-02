@@ -1,4 +1,4 @@
-default:
+install:
 	lein install
 
 build:
